@@ -1,0 +1,189 @@
+<script src="simpleTest.js"></script>
+<script>
+
+(function(){
+  var libraryStorage = {};
+
+  function clearStorage() {
+    libraryStorage = {};
+  }
+
+  function librarySystem(libraryName, dependencies, callback) {
+    if (arguments.length === 1) { // retrieve library
+      var library = libraryStorage[libraryName];
+      if (library) {
+        dependencies = [];
+        if (library.dependencies.length > 0) {
+          dependencies = library.dependencies.map(function(dependency) {
+            return librarySystem(dependency);
+          });
+        }
+        if (library.cache === null) {
+          library.cache = library.callback.apply(this, dependencies);
+        }
+        return library.cache;
+      } else {
+        throw new TypeError('This library hasn\'t been registered');
+      }
+    } else {  // register library
+      if (libraryStorage[libraryName]) {
+        throw new TypeError('You already registered a library under this name');
+      } else {
+        libraryStorage[libraryName] = {
+          callback: callback,
+          dependencies: dependencies,
+          cache: null
+        };
+      }
+
+    }
+  }
+
+  window.librarySystem = librarySystem;
+  window.clearStorage = clearStorage;
+
+})(); 
+
+
+
+tests({
+  'It should be able to load and retrieve a library.': function () {
+    librarySystem('introduction', [], function app () {
+      return 'My name is Janelle';
+    });
+    eq(librarySystem('introduction'), 'My name is Janelle');
+  },
+  'It should be able to load libraries with dependencies': function() {
+    librarySystem('name', [], function() {
+      return 'Gordon';
+    });
+
+    librarySystem('company', [], function() {
+      return 'Watch and Code';
+    });
+
+    librarySystem('workBlurb', ['name', 'company'], function(name, company) {
+      return name + ' works at ' + company;
+    });
+    eq(librarySystem('workBlurb'), 'Gordon works at Watch and Code');
+  },
+
+  'It should be able to load library with dependency before dependencies loaded.': function() {
+    librarySystem('randomFact', ['artist', 'discipline'], function(artist, discipline) {
+      return artist + ' performs on ' + discipline;
+    });
+
+    librarySystem('artist', [], function() {
+      return 'Janelle';
+    });
+
+    librarySystem('discipline', [], function() {
+      return 'aerial silks';
+    });
+
+    eq(librarySystem('randomFact'), 'Janelle performs on aerial silks');
+  },
+
+  'It should run each library callback 1 time only.': function() {
+    clearStorage();
+    var timesCallbackHasRun = 0;
+    librarySystem('name', [], function() {
+      timesCallbackHasRun++
+      return 'Gordon';
+    });
+
+    librarySystem('company', [], function() {
+      timesCallbackHasRun++
+      return 'Watch and Code';
+    });
+
+    librarySystem('workBlurb', ['name', 'company'], function(name, company) {
+      timesCallbackHasRun++
+      return name + ' works at ' + company;
+    });
+    librarySystem('workBlurb');
+    librarySystem('name');
+    librarySystem('company');
+
+    eq(timesCallbackHasRun, 3); 
+  },
+  
+
+
+});
+
+// Chujun's tests for nested dependencies.
+tests({
+  'It should work with nested dependencies.': function () {
+    clearStorage();
+    librarySystem('goal', ['leisure'], function (leisure) {
+      return leisure + ' for being stronger.';
+    });
+    librarySystem('leisure', ['hobby'], function (hobby) {
+      return 'I like ' + hobby;
+    });
+    librarySystem('hobby', [], function () {
+      return 'rock climbing';
+    });
+    eq(librarySystem('goal'), 'I like rock climbing for being stronger.');
+  },
+  'It should work with multiple nested dependencies.': function () {
+    clearStorage();
+    librarySystem('objective', ['position', 'fun'], function (position, fun) {
+      return 'I want to work as a ' + position + ' In my free time, ' + fun;
+    });
+    librarySystem('position', [], function () {
+      return 'front-end developer.'
+    });
+    librarySystem('fun', ['activity', 'destination'], function (activity, destination) {
+      return 'I enjoy ' + activity + 'I want to travel to ' + destination;
+    });
+    librarySystem('activity', [], function () {
+      return 'rock climbing, hiking and sailing. ';
+    });
+    librarySystem('destination', [], function () {
+      return 'Jordan.'
+    });
+      
+    eq(librarySystem('objective'), 'I want to work as a front-end developer. In my free time, I enjoy rock climbing, hiking and sailing. I want to travel to Jordan.');
+  }
+});
+
+
+  // Tests for cases where TypeErrors should be thrown.
+  // I got this idea to do these from Bokwon.
+  tests({
+    'It should throw a TypeError when there is an attempt to register an existing library.': function() {
+      var isError = false;
+      
+      librarySystem('app', [], function() {
+        return 'app is loaded';
+      });
+      
+      try {
+        librarySystem('app', [], function() {
+          return 'app is loaded';
+        });
+      } catch(e) {
+        isError = (e instanceof TypeError);
+      }
+      
+      eq(isError, true);
+      clearStorage();
+    },
+    'It should throw a TypeError when there is an attempt to retrieve a non-existing library.': function() {
+      var isError = false;
+      
+      try {
+        librarySystem('app');
+      } catch(e) {
+        isError = (e instanceof TypeError);
+      }
+      
+      eq(isError, true);
+      clearStorage();
+    }
+  });
+
+
+</script>
